@@ -6,6 +6,8 @@ import {
   ShoppingBag,
   Calendar,
   Heart,
+  Settings,
+  UserCircle2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -32,6 +34,11 @@ const managementItems = [
 const publicItems = [
   { title: "Catalog", url: "/catalog", icon: ShoppingBag },
   { title: "Wishlist", url: "/wishlist", icon: Heart },
+];
+
+const accountItems = [
+  { title: "My Profile", url: "/profile", icon: UserCircle2 },
+  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -85,6 +92,30 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {publicItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
+                      className="transition-colors duration-200 hover:bg-primary/10"
+                      activeClassName="bg-primary/15 text-primary font-medium"
+                    >
+                      <item.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-muted-foreground text-xs uppercase tracking-wider">
+            Account
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {accountItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
