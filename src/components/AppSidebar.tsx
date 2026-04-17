@@ -6,6 +6,8 @@ import {
   ShoppingBag,
   Calendar,
   Heart,
+  Settings,
+  UserCircle2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -32,6 +34,11 @@ const managementItems = [
 const publicItems = [
   { title: "Catalog", url: "/catalog", icon: ShoppingBag },
   { title: "Wishlist", url: "/wishlist", icon: Heart },
+];
+
+const accountItems = [
+  { title: "My Profile", url: "/profile", icon: UserCircle2 },
+  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
