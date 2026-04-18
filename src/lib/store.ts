@@ -119,7 +119,7 @@ interface StoreState {
 
 export const useStore = create<StoreState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       dresses: sampleDresses,
       bookings: sampleBookings,
       addDress: (d) =>
