@@ -1,13 +1,15 @@
 import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { sampleBookings, sampleDresses } from "@/lib/store";
+import { useStore } from "@/lib/store";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function CalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date(2025, 3, 1)); // April 2025
+  const bookings = useStore((s) => s.bookings);
+  const dresses = useStore((s) => s.dresses);
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -15,8 +17,8 @@ export default function CalendarPage() {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   const bookingsByDate = useMemo(() => {
-    const map: Record<string, typeof sampleBookings> = {};
-    sampleBookings.forEach((b) => {
+    const map: Record<string, typeof bookings> = {};
+    bookings.forEach((b) => {
       const start = new Date(b.bookingDate);
       const end = new Date(b.returnDate);
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -26,9 +28,9 @@ export default function CalendarPage() {
       }
     });
     return map;
-  }, []);
+  }, [bookings]);
 
-  const cells = [];
+  const cells: (number | null)[] = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
@@ -55,9 +57,7 @@ export default function CalendarPage() {
 
           <div className="grid grid-cols-7 gap-1">
             {DAYS.map((day) => (
-              <div key={day} className="text-center text-xs text-muted-foreground font-medium py-2">
-                {day}
-              </div>
+              <div key={day} className="text-center text-xs text-muted-foreground font-medium py-2">{day}</div>
             ))}
 
             {cells.map((day, i) => {
@@ -67,25 +67,20 @@ export default function CalendarPage() {
               const hasBooking = dayBookings.length > 0;
 
               return (
-                <div
-                  key={day}
+                <div key={day}
                   className={`min-h-[80px] p-2 rounded-lg border transition-colors ${
-                    hasBooking
-                      ? "border-primary/30 bg-primary/5"
-                      : "border-border/30 hover:border-border/60"
-                  }`}
-                >
-                  <span className={`text-sm font-medium ${hasBooking ? "text-primary" : ""}`}>
-                    {day}
-                  </span>
-                  {dayBookings.map((b) => {
-                    const dress = sampleDresses.find((d) => d.id === b.dressId);
+                    hasBooking ? "border-primary/30 bg-primary/5" : "border-border/30 hover:border-border/60"
+                  }`}>
+                  <span className={`text-sm font-medium ${hasBooking ? "text-primary" : ""}`}>{day}</span>
+                  {dayBookings.slice(0, 3).map((b) => {
+                    const dress = dresses.find((d) => d.id === b.dressId);
                     return (
                       <div key={b.id} className="mt-1 px-1.5 py-0.5 bg-primary/15 rounded text-[10px] text-primary truncate">
-                        {dress?.name?.split(" ")[0]}
+                        {dress?.name?.split(" ")[0] ?? "—"}
                       </div>
                     );
                   })}
+                  {dayBookings.length > 3 && <div className="text-[10px] text-muted-foreground mt-1">+{dayBookings.length - 3}</div>}
                 </div>
               );
             })}

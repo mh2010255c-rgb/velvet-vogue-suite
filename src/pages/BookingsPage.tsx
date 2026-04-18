@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,12 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, CalendarCheck, MessageCircle } from "lucide-react";
+import { Plus, MessageCircle, AlertTriangle, Trash2 } from "lucide-react";
 import {
-  sampleBookings,
-  sampleDresses,
+  useStore,
   wilayas,
   formatDZD,
+  daysBetween,
+  hasBookingConflict,
   type Booking,
   type PaymentStatus,
 } from "@/lib/store";
@@ -19,12 +20,15 @@ import { toast } from "sonner";
 
 const paymentStatuses: PaymentStatus[] = ["Pending", "Partial", "Paid", "Refunded"];
 
-function BookingForm({ onSave, onClose }: { onSave: (b: Partial<Booking>) => void; onClose: () => void }) {
+function BookingForm({ onSave, onClose }: { onSave: (b: Omit<Booking, "id" | "createdAt">) => void; onClose: () => void }) {
+  const dresses = useStore((s) => s.dresses);
+  const bookings = useStore((s) => s.bookings);
+
   const [form, setForm] = useState({
     dressId: "",
     customerName: "",
     phone: "",
-    wilaya: "",
+    wilaya: "Algiers",
     address: "",
     bookingDate: "",
     returnDate: "",
@@ -34,14 +38,28 @@ function BookingForm({ onSave, onClose }: { onSave: (b: Partial<Booking>) => voi
     notes: "",
   });
 
+  const selectedDress = dresses.find((d) => d.id === form.dressId);
+  const days = daysBetween(form.bookingDate, form.returnDate);
+  const computedTotal = selectedDress ? selectedDress.rentalPrice * days : 0;
+  const conflict = useMemo(
+    () => hasBookingConflict(bookings, form.dressId, form.bookingDate, form.returnDate),
+    [bookings, form.dressId, form.bookingDate, form.returnDate]
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(form);
+    if (conflict) {
+      toast.error(`Conflict: dress already booked ${conflict.bookingDate} → ${conflict.returnDate}`);
+      return;
+    }
+    if (!form.dressId) {
+      toast.error("Select a dress");
+      return;
+    }
+    onSave({ ...form, totalAmount: form.totalAmount || computedTotal });
     onClose();
     toast.success("Booking created");
   };
-
-  const availableDresses = sampleDresses.filter((d) => d.status === "Available");
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -49,15 +67,44 @@ function BookingForm({ onSave, onClose }: { onSave: (b: Partial<Booking>) => voi
         <div className="col-span-2">
           <Label>Dress</Label>
           <Select value={form.dressId} onValueChange={(v) => {
-            const dress = sampleDresses.find((d) => d.id === v);
-            setForm({ ...form, dressId: v, totalAmount: dress?.rentalPrice ?? 0, depositPaid: dress?.depositAmount ?? 0 });
+            const d = dresses.find((x) => x.id === v);
+            setForm({ ...form, dressId: v, depositPaid: d?.depositAmount ?? 0 });
           }}>
             <SelectTrigger className="mt-1"><SelectValue placeholder="Select a dress" /></SelectTrigger>
             <SelectContent>
-              {availableDresses.map((d) => <SelectItem key={d.id} value={d.id}>{d.name} - {d.size}</SelectItem>)}
+              {dresses.filter((d) => d.status !== "Sold").map((d) => (
+                <SelectItem key={d.id} value={d.id}>{d.name} — {d.size} · {formatDZD(d.rentalPrice)}/day</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
+
+        <div>
+          <Label>Booking Date</Label>
+          <Input type="date" value={form.bookingDate} onChange={(e) => setForm({ ...form, bookingDate: e.target.value })} required className="mt-1" />
+        </div>
+        <div>
+          <Label>Return Date</Label>
+          <Input type="date" value={form.returnDate} min={form.bookingDate} onChange={(e) => setForm({ ...form, returnDate: e.target.value })} required className="mt-1" />
+        </div>
+
+        {conflict && (
+          <div className="col-span-2 flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs">
+            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Date conflict</p>
+              <p className="opacity-80">This dress is already booked {conflict.bookingDate} → {conflict.returnDate} ({conflict.customerName})</p>
+            </div>
+          </div>
+        )}
+
+        {selectedDress && days > 0 && (
+          <div className="col-span-2 p-3 rounded-md bg-primary/5 border border-primary/20 text-xs flex items-center justify-between">
+            <span className="text-muted-foreground">{days} day{days > 1 ? "s" : ""} × {formatDZD(selectedDress.rentalPrice)}</span>
+            <span className="font-semibold text-primary">{formatDZD(computedTotal)}</span>
+          </div>
+        )}
+
         <div className="col-span-2">
           <Label>Customer Name</Label>
           <Input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} required className="mt-1" />
@@ -69,7 +116,7 @@ function BookingForm({ onSave, onClose }: { onSave: (b: Partial<Booking>) => voi
         <div>
           <Label>Wilaya</Label>
           <Select value={form.wilaya} onValueChange={(v) => setForm({ ...form, wilaya: v })}>
-            <SelectTrigger className="mt-1"><SelectValue placeholder="Select wilaya" /></SelectTrigger>
+            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
             <SelectContent>
               {wilayas.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}
             </SelectContent>
@@ -80,22 +127,14 @@ function BookingForm({ onSave, onClose }: { onSave: (b: Partial<Booking>) => voi
           <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="mt-1" />
         </div>
         <div>
-          <Label>Booking Date</Label>
-          <Input type="date" value={form.bookingDate} onChange={(e) => setForm({ ...form, bookingDate: e.target.value })} required className="mt-1" />
-        </div>
-        <div>
-          <Label>Return Date</Label>
-          <Input type="date" value={form.returnDate} onChange={(e) => setForm({ ...form, returnDate: e.target.value })} required className="mt-1" />
-        </div>
-        <div>
           <Label>Deposit Paid (DA)</Label>
           <Input type="number" value={form.depositPaid} onChange={(e) => setForm({ ...form, depositPaid: Number(e.target.value) })} className="mt-1" />
         </div>
         <div>
-          <Label>Total Amount (DA)</Label>
-          <Input type="number" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: Number(e.target.value) })} className="mt-1" />
+          <Label>Total Override (DA)</Label>
+          <Input type="number" placeholder={String(computedTotal)} value={form.totalAmount || ""} onChange={(e) => setForm({ ...form, totalAmount: Number(e.target.value) })} className="mt-1" />
         </div>
-        <div>
+        <div className="col-span-2">
           <Label>Payment Status</Label>
           <Select value={form.paymentStatus} onValueChange={(v) => setForm({ ...form, paymentStatus: v as PaymentStatus })}>
             <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -111,24 +150,25 @@ function BookingForm({ onSave, onClose }: { onSave: (b: Partial<Booking>) => voi
       </div>
       <div className="flex justify-end gap-3 pt-2">
         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-        <Button type="submit">Create Booking</Button>
+        <Button type="submit" disabled={!!conflict}>Create Booking</Button>
       </div>
     </form>
   );
 }
 
 export default function BookingsPage() {
-  const [bookings, setBookings] = useState<Booking[]>(sampleBookings);
+  const bookings = useStore((s) => s.bookings);
+  const dresses = useStore((s) => s.dresses);
+  const addBooking = useStore((s) => s.addBooking);
+  const deleteBooking = useStore((s) => s.deleteBooking);
   const [dialogOpen, setDialogOpen] = useState(false);
-
-  const handleSave = (data: Partial<Booking>) => {
-    setBookings((prev) => [...prev, { ...data, id: Date.now().toString(), createdAt: new Date().toISOString().split("T")[0] } as Booking]);
-  };
 
   const handleWhatsApp = (phone: string, name: string) => {
     const msg = encodeURIComponent(`Hello ${name}, this is Dress Boutique. We'd like to follow up on your booking.`);
     window.open(`https://wa.me/${phone.replace(/^0/, "213")}?text=${msg}`, "_blank");
   };
+
+  const sorted = [...bookings].sort((a, b) => b.bookingDate.localeCompare(a.bookingDate));
 
   return (
     <DashboardLayout>
@@ -144,7 +184,7 @@ export default function BookingsPage() {
             </DialogTrigger>
             <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle className="font-display">New Booking</DialogTitle></DialogHeader>
-              <BookingForm onSave={handleSave} onClose={() => setDialogOpen(false)} />
+              <BookingForm onSave={(b) => addBooking(b)} onClose={() => setDialogOpen(false)} />
             </DialogContent>
           </Dialog>
         </div>
@@ -159,12 +199,12 @@ export default function BookingsPage() {
                   <th className="text-left py-3 px-4 text-muted-foreground font-medium">Dates</th>
                   <th className="text-left py-3 px-4 text-muted-foreground font-medium">Amount</th>
                   <th className="text-left py-3 px-4 text-muted-foreground font-medium">Payment</th>
-                  <th className="text-left py-3 px-4 text-muted-foreground font-medium">Actions</th>
+                  <th className="text-right py-3 px-4 text-muted-foreground font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {bookings.map((b) => {
-                  const dress = sampleDresses.find((d) => d.id === b.dressId);
+                {sorted.map((b) => {
+                  const dress = dresses.find((d) => d.id === b.dressId);
                   return (
                     <tr key={b.id} className="border-b border-border/30 hover:bg-secondary/20 transition-colors">
                       <td className="py-3 px-4">
@@ -185,18 +225,24 @@ export default function BookingsPage() {
                           b.paymentStatus === "Paid" ? "bg-success/15 text-success"
                           : b.paymentStatus === "Partial" ? "bg-warning/15 text-warning"
                           : "bg-muted text-muted-foreground"
-                        }`}>
-                          {b.paymentStatus}
-                        </span>
+                        }`}>{b.paymentStatus}</span>
                       </td>
-                      <td className="py-3 px-4">
-                        <Button size="icon" variant="ghost" className="h-8 w-8 hover:bg-success/10 hover:text-success" onClick={() => handleWhatsApp(b.phone, b.customerName)}>
+                      <td className="py-3 px-4 text-right">
+                        <Button size="icon" variant="ghost" className="h-8 w-8 hover:bg-success/10 hover:text-success"
+                          onClick={() => handleWhatsApp(b.phone, b.customerName)}>
                           <MessageCircle className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => { deleteBooking(b.id); toast.success("Booking removed"); }}>
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </td>
                     </tr>
                   );
                 })}
+                {sorted.length === 0 && (
+                  <tr><td colSpan={6} className="py-8 text-center text-muted-foreground text-sm">No bookings yet</td></tr>
+                )}
               </tbody>
             </table>
           </div>
